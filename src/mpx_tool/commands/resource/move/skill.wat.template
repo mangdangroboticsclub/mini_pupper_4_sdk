@@ -12,9 +12,9 @@
 
 (module
     ;; Import host functions from the "env" module
-    (import "env" "print" (func $print (param i32 i32)))
-    (import "env" "robot_gait" (func $robot_gait (param i32)))
-    (import "env" "robot_delay_ms" (func $robot_delay_ms (param i32)))
+    (import "env" "print" (func $print (param i32 i32) (result i32)))
+    (import "env" "robot_gait" (func $robot_gait (param i32) (result i32)))
+    (import "env" "robot_delay_ms" (func $robot_delay_ms (param i32) (result i32)))
 
     ;; Export linear memory (1 page = 64 KB)
     (memory (export "memory") 1)
@@ -28,19 +28,23 @@
     (func (export "on_start")
         ;; Print greeting
         i32.const 0
-        i32.const 18
+        i32.const {greeting_len}
         call $print
+        drop
 
         ;; Start advancing gait
         i32.const 64
         call $robot_gait
+        drop
 
         ;; Walk for 2 seconds
         i32.const 2000
         call $robot_delay_ms
+        drop
 
         ;; Stop
         i32.const 128
         call $robot_gait
+        drop
     )
 )

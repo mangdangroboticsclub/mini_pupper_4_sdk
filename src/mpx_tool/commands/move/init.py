@@ -66,7 +66,13 @@ def cmd_move_init(args: argparse.Namespace) -> None:
 
     # ── Sources + language-specific includes ─────────────────────
     src_dir = out_dir / "src"
-    write_file(src_dir / f"{name}.{lang}", read_resource(_RES, f"skill.{lang}.template").format(name=name))
+    greeting_len = len(f"Hello from {name}!".encode("utf-8"))
+    write_file(
+        src_dir / f"{name}.{lang}",
+        read_resource(_RES, f"skill.{lang}.template").format(
+            name=name, greeting_len=greeting_len
+        ),
+    )
 
     include_dir = out_dir / "include"
     include_resource = {

@@ -13,7 +13,8 @@ pipx install mpx            # recommended, works on Windows/macOS/Linux
 
 The tool ships the skill SDK header (`mpx_tool/commands/resource/move/mpx_host.h`)
 inside the package, and `mpx move build` compiles your source against *that* copy.
-A firmware release that changes host-function signatures therefore only reaches
+The bundled C, AssemblyScript and WAT declarations cover all 107 functions in
+host ABI v9. A firmware release that changes host-function signatures therefore only reaches
 your skills after the CLI itself is upgraded — editing an `include/` copy in your
 project is not enough, because the build does not use it.
 

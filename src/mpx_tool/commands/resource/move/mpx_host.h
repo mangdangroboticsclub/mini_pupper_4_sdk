@@ -18,14 +18,16 @@
  *       robot_gait((int)"none");
  *   }
  *
- * ABI v2 (MPX_ABI_VERSION 2): every function below returns ``int`` — 0 on
- * success, a negative error code otherwise. All seventeen that used to be
- * declared ``void`` (print, robot_gait, robot_set_config, robot_delay_ms and
- * friends) return int too. The firmware registers them with an i32 result, and
- * WAMR refuses to link a module whose import type does not match the symbol
- * exactly, so a skill compiled against an older ``void`` header traps on its
- * first host call with "failed to call unlinked import function". Rebuild
- * after updating this header; do not mix v1 and v2 objects.
+ * Host ABI v9 (MPX_ABI_VERSION 9). Every command function returns ``int``:
+ * 0 on success or a negative MPX_ERR_* code. Getters return data or an error
+ * as documented below. WAMR requires each import type to match the firmware
+ * exactly; rebuild skills after updating this header instead of mixing objects
+ * built against different ABI declarations.
+ *
+ * ABI v2 added direct servo-bus access. v3 added control arbitration, clock,
+ * drive and foot control. v4 added overlays, ticks and traces. v5 added board
+ * scaling. v6 added display, filesystem, music and robot-state functions. v7
+ * added microphone capture, v8 speaker playback, and v9 HTTP requests.
  *
  * Compile with WASI SDK:
  *   /opt/wasi-sdk/bin/clang \
@@ -44,6 +46,38 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#define MPX_ABI_VERSION 9
+
+/* Common return codes. Getters may instead return a non-negative value. */
+#define MPX_OK              0
+#define MPX_ERR_ARG        -1  /* Bad argument: id, index or pointer. */
+#define MPX_ERR_NOT_LOCKED -2  /* This skill does not hold the servo bus. */
+#define MPX_ERR_NO_REPLY   -3  /* The driver board did not answer. */
+#define MPX_ERR_READONLY   -4  /* Calibration parameter is read-only. */
+#define MPX_ERR_CANCELLED  -5  /* The skill was stopped mid-call. */
+#define MPX_ERR_STATE      -6  /* Right call, wrong time or unavailable. */
+#define MPX_ERR_BUSY       -7  /* Another control domain holds the joints. */
+
+/* Control domains for mpx_control_take() and mpx_control_owner(). */
+typedef enum {
+    MPX_CTRL_NONE   = 0,
+    MPX_CTRL_GAIT   = 1,
+    MPX_CTRL_FEET   = 2,
+    MPX_CTRL_JOINTS = 3,
+    MPX_CTRL_BUS    = 4,
+} mpx_control_domain_t;
+
+/* Leg identifiers for mpx_foot(). */
+typedef enum {
+    MPX_LEG_FR = 0,
+    MPX_LEG_FL = 1,
+    MPX_LEG_RR = 2,
+    MPX_LEG_RL = 3,
+} mpx_leg_t;
+
+/** Return the firmware host ABI version. WAMR sig: "()i". */
+extern int mpx_abi_version(void);
 
 /* ── SDK / Logging ───────────────────────────────────────────── */
 
@@ -229,6 +263,15 @@ extern int robot_flush(void);
 extern int robot_set_servo_speed(int id, int speed);
 
 /**
+ * @brief Set a servo's current limit (the hardware's torque control).
+ * Clamped to 0..1500 mA and persisted across reboots. WAMR sig: "(ii)i".
+ */
+extern int robot_set_servo_current(int id, int milliamps);
+
+/** @brief Get the current limit in mA, or 0 for a bad id. WAMR sig: "(i)i". */
+extern int robot_get_servo_current(int id);
+
+/**
  * @brief Read a servo's current position.
  *
  * Wasm import:  extern int robot_read_position(int id);
@@ -238,6 +281,13 @@ extern int robot_set_servo_speed(int id, int speed);
  * @return Raw position (0-1023), or -1 on error
  */
 extern int robot_read_position(int id);
+
+/**
+ * @brief Read measured angle in signed centidegrees relative to centre.
+ * Uses the same coordinate frame as robot_set_servo_angle(), unlike
+ * robot_read_position(). Returns INT32_MIN for a bad id. WAMR sig: "(i)i".
+ */
+extern int robot_read_angle_cdeg(int id);
 
 /**
  * @brief Read a servo's current speed.
@@ -419,6 +469,171 @@ extern int robot_imu_read(int buffer_ptr);
  * WAMR sig:     "()i"
  */
 extern int robot_imu_print(void);
+
+/* ── Direct servo bus (ABI v2; requires servo_lock) ────────────── */
+
+/** Park the gait and take ownership of the servo bus. WAMR sig: "()i". */
+extern int servo_lock(void);
+/** Release the servo bus. WAMR sig: "()i". */
+extern int servo_unlock(void);
+/** Return whether this skill holds the bus (not whether anyone does). */
+extern int servo_is_locked(void);
+/** Set a servo gain; calibration parameters return MPX_ERR_READONLY. */
+extern int servo_set_gain(int id, int param, float value);
+/** Write the requested gain to the float at out_ptr. */
+extern int servo_get_gain(int id, int param, int out_ptr);
+/** Save servo configuration; id 0 means all boards. */
+extern int servo_save_config(int id);
+/** Restore servo configuration in RAM. */
+extern int servo_restore_config(int id);
+/** Stage one servo shadow without touching the bus. WAMR sig: "(iffff)i". */
+extern int servo_stage(int id, float q_deg, float tau_ma, float kp, float kd);
+/** Commit staged values to all four boards. */
+extern int servo_commit(void);
+/** Stage and commit count records of {q_deg, tau_ma, kp, kd} floats. */
+extern int servo_write_all(int cmd_ptr, int count);
+/** Write four floats to out_ptr: {q_deg, tau_ma, temp_c, q_raw}. */
+extern int servo_read(int id, int out_ptr);
+/** Write 12 x 4 floats in servo_read() layout to out_ptr. */
+extern int servo_read_all(int out_ptr);
+/** Refresh the servo feedback cache. */
+extern int servo_poll(void);
+/** Direct mode: 0 idle, 1 position, 2 torque. WAMR sig: "(iiff)i". */
+extern int servo_direct(int id, int mode, float q_deg, float tau_ma);
+/** Return a connected-servo bitmask; bit 0 represents servo 1. */
+extern int servo_scan(void);
+
+/* ── Control, clock and motion (ABI v3) ────────────────────────── */
+
+/** Claim a MPX_CTRL_* domain; returns MPX_ERR_BUSY if already claimed. */
+extern int mpx_control_take(int domain);
+/** Release this skill's control-domain claim. */
+extern int mpx_control_release(void);
+/** Return the current MPX_CTRL_* owner. */
+extern int mpx_control_owner(void);
+/** Milliseconds since this skill run started, not since boot. */
+extern int mpx_millis(void);
+/** Sleep until an absolute mpx_millis() deadline, avoiding timing drift. */
+extern int mpx_sleep_until(int t_ms);
+/** Set continuous forward, strafe and turn drive. WAMR sig: "(fff)i". */
+extern int mpx_drive(float fwd, float strafe, float turn);
+/** Stop continuous drive. */
+extern int mpx_drive_stop(void);
+/** Set walk speed in mm/s, clamped to 10..200. */
+extern int mpx_set_walk_speed(int mm_s);
+/** Get walk speed in mm/s. */
+extern int mpx_get_walk_speed(void);
+/** Place a MPX_LEG_* foot; z is down-positive from the hip (about +70 standing). */
+extern int mpx_foot(int leg, float x, float th0, float z);
+/** Store the speed used for subsequent servo writes; does not send it. */
+extern int mpx_set_all_servo_speed(int speed);
+/** Zero all twelve servo offsets in NVS. */
+extern int mpx_reset_offsets(void);
+/** Read fractional temperature in degrees C. WAMR sig: "(i)f". */
+extern float mpx_read_temperature_c(int id);
+
+/* ── Board parameters (ABI v3-v5) ──────────────────────────────── */
+
+/** Board travel x10 in deci-degrees, or 0 if no board answered. */
+extern float mpx_board_scale_dd(void);
+/** Read float parameter by string offset, returning fallback if absent. */
+extern float mpx_param_f(int name_ptr, float fallback);
+/** Read integer parameter by string offset, returning fallback if absent. */
+extern int mpx_param_i(int name_ptr, int fallback);
+
+/* ── Overlay, tick and trace (ABI v4) ──────────────────────────── */
+
+/** Add a clamped degree offset to a gait-generated servo frame. */
+extern int mpx_overlay(int id, float deg);
+/** Get a servo's current overlay offset in degrees. */
+extern float mpx_overlay_get(int id);
+/** Clear all servo overlays. */
+extern int mpx_overlay_clear(void);
+/** Run on_tick every period_ms, clamped to 10..1000; export on_tick in the skill. */
+extern int mpx_tick_every(int period_ms);
+/** Stop periodic on_tick calls. */
+extern int mpx_tick_stop(void);
+/** Emit a named numeric trace; name_ptr is a NUL-terminated string offset. */
+extern int mpx_trace(int name_ptr, float value);
+
+/* ── Display canvas (ABI v6) ───────────────────────────────────── */
+/* Colours are 0xRRGGBB; coordinates start at the top left. Paint, then call
+ * display_show(). Robots without a panel return MPX_ERR_STATE. */
+extern int display_width(void);
+extern int display_height(void);
+/** Pack 8-bit red, green and blue channels into 0xRRGGBB. */
+extern int display_rgb(int r, int g, int b);
+extern int display_clear(int color);
+extern int display_pixel(int x, int y, int color);
+/** radius -1 draws a pill; border 1 draws only the outline. */
+extern int display_rect(int x, int y, int w, int h, int color,
+                        int radius, int border);
+extern int display_circle(int cx, int cy, int r, int color, int border);
+extern int display_line(int x1, int y1, int x2, int y2, int color, int width);
+/** Angles are clockwise with 0 degrees at 3 o'clock. */
+extern int display_arc(int cx, int cy, int r, int start_deg, int end_deg,
+                       int color, int width);
+/** size 14/28/48 (0 = 14); align -1/0/1 = left/centre/right; max_w 0 = auto. */
+extern int display_text(int x, int y, int text_ptr, int color,
+                        int size, int align, int max_w);
+/** Blit w*h*2 bytes of little-endian RGB565 data. */
+extern int display_blit(int x, int y, int w, int h, int data_ptr, int len);
+/** Show the canvas; hold_ms 0 means until something else takes the screen. */
+extern int display_show(int hold_ms);
+/** Restore the robot face immediately. */
+extern int display_face(void);
+/** Show one centred line of NUL-terminated text. */
+extern int display_show_text(int text_ptr);
+/** Show a named emotion; unknown names return MPX_ERR_ARG. */
+extern int display_show_emotion(int name_ptr);
+/** Set face colours; -1 leaves that colour unchanged. */
+extern int display_set_colors(int background_rgb, int eyes_rgb);
+/** Set display brightness, clamped to 0..100. */
+extern int display_set_brightness(int percent);
+
+/* ── LittleFS filesystem (ABI v6) ──────────────────────────────── */
+/* Paths are absolute inside LittleFS, for example "/data.txt". */
+/** Copy into buf; return whole file size (a value > cap means truncation). */
+extern int fs_read(int path_ptr, int buf_ptr, int cap);
+/** Write after phone-app user approval; may wait up to 60 seconds. */
+extern int fs_write(int path_ptr, int data_ptr, int len);
+/** Delete after phone-app user approval. */
+extern int fs_delete(int path_ptr);
+/** Return 1 if path exists, otherwise 0. */
+extern int fs_exists(int path_ptr);
+/** List lines as "name<TAB>size<TAB>d|f\n"; MPX_ERR_ARG if cap is too small. */
+extern int fs_list(int dir_ptr, int buf_ptr, int cap);
+/** Write total and used bytes to an int[2] at out_ptr. */
+extern int fs_info(int out_ptr);
+
+/* ── Music and robot state (ABI v6) ────────────────────────────── */
+/** Play a genre/mood or HTTP(S) URL; optional title_ptr receives its title. */
+extern int music_play(int what_ptr, int title_ptr, int cap);
+extern int music_stop(void);
+/** Write period, height, up_height, stride, tilt and sg_speed to an int[6]. */
+extern int robot_get_config(int out_ptr);
+/** Copy current movement name to buf; MPX_ERR_ARG if it does not fit. */
+extern int robot_get_gait(int buf_ptr, int cap);
+
+/* ── Microphone (ABI v7) ───────────────────────────────────────── */
+/** Open mono capture; sample_rate 0 selects 16 kHz. A second active call returns MPX_ERR_BUSY. */
+extern int mpx_mic_start(int sample_rate);
+/** Read up to frames mono int16 samples; maximum 1920 frames per call. */
+extern int mpx_mic_read(int pcm_ptr, int frames);
+/** Close capture; idempotent and automatically called at run exit. */
+extern int mpx_mic_stop(void);
+
+/* ── Speaker audio (ABI v8) ────────────────────────────────────── */
+/** Synchronously play a 16-bit PCM mono/stereo WAV from LittleFS. */
+extern int mpx_audio_play_file(int path_ptr);
+/** Queue asynchronous HTTP(S) audio streaming; use music_stop() to stop. */
+extern int mpx_audio_stream_url(int url_ptr);
+
+/* ── HTTP(S) APIs (ABI v9) ─────────────────────────────────────── */
+/** Blocking GET, 15 s timeout; NUL-terminate response and return HTTP status. */
+extern int mpx_http_get(int url_ptr, int response_ptr, int cap);
+/** Blocking JSON POST; body_ptr 0 sends an empty request. */
+extern int mpx_http_post(int url_ptr, int body_ptr, int response_ptr, int cap);
 
 /* ═══════════════════════════════════════════════════════════════════
  *  PART 2 — High-Level Abstractions

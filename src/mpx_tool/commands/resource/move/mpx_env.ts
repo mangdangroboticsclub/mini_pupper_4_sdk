@@ -9,24 +9,45 @@
  *   } from "../include/mpx_env";
  *
  * All functions are registered under the "env" module by the ESP32 firmware.
+ * Host ABI v9: command functions return i32 status; getters return data or
+ * a negative MPX_ERR_* value. String and buffer arguments are linear-memory
+ * pointers. See mpx_host.h for detailed buffer layouts and call semantics.
  */
 
-// ── SDK / Logging ───────────────────────────────────────────────
+export const MPX_ABI_VERSION: i32 = 9;
+export const MPX_OK: i32 = 0;
+export const MPX_ERR_ARG: i32 = -1;
+export const MPX_ERR_NOT_LOCKED: i32 = -2;
+export const MPX_ERR_NO_REPLY: i32 = -3;
+export const MPX_ERR_READONLY: i32 = -4;
+export const MPX_ERR_CANCELLED: i32 = -5;
+export const MPX_ERR_STATE: i32 = -6;
+export const MPX_ERR_BUSY: i32 = -7;
+
+// ── ABI / Logging ────────────────────────────────────────────────
+@external("env", "mpx_abi_version")
+export declare function mpx_abi_version(): i32;
 @external("env", "print")
-export declare function print(ptr: usize, len: i32): void;
+export declare function print(ptr: usize, len: i32): i32;
 
 // ── High-Level Gait Control ─────────────────────────────────────
 @external("env", "robot_gait")
-export declare function robot_gait(name_ptr: usize): void;
+export declare function robot_gait(name_ptr: usize): i32;
 @external("env", "robot_get_mode")
 export declare function robot_get_mode(): i32;
+@external("env", "robot_set_body_pose")
+export declare function robot_set_body_pose(roll_deg: f32, pitch_deg: f32, yaw_deg: f32): i32;
+@external("env", "robot_set_attitude_speed")
+export declare function robot_set_attitude_speed(dps: i32): i32;
+@external("env", "robot_set_attitude_speed_xyz")
+export declare function robot_set_attitude_speed_xyz(roll_dps: i32, pitch_dps: i32, yaw_dps: i32): i32;
 
 // ── Configuration ───────────────────────────────────────────────
 @external("env", "robot_set_config")
 export declare function robot_set_config(
     period: i32, height: i32,
     up_height: i32, stride: i32, tilt: i32,
-): void;
+): i32;
 @external("env", "robot_get_period")
 export declare function robot_get_period(): i32;
 @external("env", "robot_get_height")
@@ -40,15 +61,19 @@ export declare function robot_get_tilt(): i32;
 
 // ── Low-Level Servo Control ─────────────────────────────────────
 @external("env", "robot_set_servo_angle")
-export declare function robot_set_servo_angle(id: i32, centideg: i32): void;
+export declare function robot_set_servo_angle(id: i32, centideg: i32): i32;
 @external("env", "robot_flush")
-export declare function robot_flush(): void;
+export declare function robot_flush(): i32;
 @external("env", "robot_set_servo_speed")
-export declare function robot_set_servo_speed(id: i32, speed: i32): void;
+export declare function robot_set_servo_speed(id: i32, speed: i32): i32;
+@external("env", "robot_set_servo_current")
+export declare function robot_set_servo_current(id: i32, milliamps: i32): i32;
+@external("env", "robot_get_servo_current")
+export declare function robot_get_servo_current(id: i32): i32;
 @external("env", "robot_read_position")
 export declare function robot_read_position(id: i32): i32;
-
-// ── Additional Servo Read Functions ──────────────────────────────
+@external("env", "robot_read_angle_cdeg")
+export declare function robot_read_angle_cdeg(id: i32): i32;
 @external("env", "robot_read_speed")
 export declare function robot_read_speed(id: i32): i32;
 @external("env", "robot_read_load")
@@ -62,40 +87,205 @@ export declare function robot_read_moving(id: i32): i32;
 @external("env", "robot_read_current")
 export declare function robot_read_current(id: i32): i32;
 
-// ── Calibration ─────────────────────────────────────────────────
+// ── Calibration / Utility ───────────────────────────────────────
 @external("env", "robot_set_offset")
-export declare function robot_set_offset(id: i32, centideg: i32): void;
+export declare function robot_set_offset(id: i32, centideg: i32): i32;
 @external("env", "robot_get_offset")
 export declare function robot_get_offset(id: i32): i32;
 @external("env", "robot_ping_servo")
 export declare function robot_ping_servo(id: i32): i32;
-
-// ── Utility ─────────────────────────────────────────────────────
 @external("env", "robot_delay_ms")
-export declare function robot_delay_ms(ms: i32): void;
+export declare function robot_delay_ms(ms: i32): i32;
 
-// ── Inverse Kinematics (per-leg) ─────────────────────────────────
+// ── Inverse Kinematics / IMU ────────────────────────────────────
 @external("env", "robot_ik_fr")
-export declare function robot_ik_fr(x: f32, th0: f32, z: f32): void;
+export declare function robot_ik_fr(x: f32, th0: f32, z: f32): i32;
 @external("env", "robot_ik_fl")
-export declare function robot_ik_fl(x: f32, th0: f32, z: f32): void;
+export declare function robot_ik_fl(x: f32, th0: f32, z: f32): i32;
 @external("env", "robot_ik_rr")
-export declare function robot_ik_rr(x: f32, th0: f32, z: f32): void;
+export declare function robot_ik_rr(x: f32, th0: f32, z: f32): i32;
 @external("env", "robot_ik_rl")
-export declare function robot_ik_rl(x: f32, th0: f32, z: f32): void;
-
-// ── IMU ──────────────────────────────────────────────────────────
+export declare function robot_ik_rl(x: f32, th0: f32, z: f32): i32;
 @external("env", "robot_imu_read")
-export declare function robot_imu_read(buffer_ptr: usize): void;
+export declare function robot_imu_read(buffer_ptr: usize): i32;
 @external("env", "robot_imu_print")
-export declare function robot_imu_print(): void;
+export declare function robot_imu_print(): i32;
+
+// ── Direct servo bus (requires servo_lock) ──────────────────────
+@external("env", "servo_lock")
+export declare function servo_lock(): i32;
+@external("env", "servo_unlock")
+export declare function servo_unlock(): i32;
+@external("env", "servo_is_locked")
+export declare function servo_is_locked(): i32;
+@external("env", "servo_set_gain")
+export declare function servo_set_gain(id: i32, param: i32, value: f32): i32;
+@external("env", "servo_get_gain")
+export declare function servo_get_gain(id: i32, param: i32, out_ptr: usize): i32;
+@external("env", "servo_save_config")
+export declare function servo_save_config(id: i32): i32;
+@external("env", "servo_restore_config")
+export declare function servo_restore_config(id: i32): i32;
+@external("env", "servo_stage")
+export declare function servo_stage(id: i32, q_deg: f32, tau_ma: f32, kp: f32, kd: f32): i32;
+@external("env", "servo_commit")
+export declare function servo_commit(): i32;
+@external("env", "servo_write_all")
+export declare function servo_write_all(cmd_ptr: usize, count: i32): i32;
+@external("env", "servo_read")
+export declare function servo_read(id: i32, out_ptr: usize): i32;
+@external("env", "servo_read_all")
+export declare function servo_read_all(out_ptr: usize): i32;
+@external("env", "servo_poll")
+export declare function servo_poll(): i32;
+@external("env", "servo_direct")
+export declare function servo_direct(id: i32, mode: i32, q_deg: f32, tau_ma: f32): i32;
+@external("env", "servo_scan")
+export declare function servo_scan(): i32;
+
+// ── Control, clock and motion ───────────────────────────────────
+@external("env", "mpx_control_take")
+export declare function mpx_control_take(domain: i32): i32;
+@external("env", "mpx_control_release")
+export declare function mpx_control_release(): i32;
+@external("env", "mpx_control_owner")
+export declare function mpx_control_owner(): i32;
+@external("env", "mpx_millis")
+export declare function mpx_millis(): i32;
+@external("env", "mpx_sleep_until")
+export declare function mpx_sleep_until(t_ms: i32): i32;
+@external("env", "mpx_drive")
+export declare function mpx_drive(fwd: f32, strafe: f32, turn: f32): i32;
+@external("env", "mpx_drive_stop")
+export declare function mpx_drive_stop(): i32;
+@external("env", "mpx_set_walk_speed")
+export declare function mpx_set_walk_speed(mm_s: i32): i32;
+@external("env", "mpx_get_walk_speed")
+export declare function mpx_get_walk_speed(): i32;
+@external("env", "mpx_foot")
+export declare function mpx_foot(leg: i32, x: f32, th0: f32, z: f32): i32;
+@external("env", "mpx_set_all_servo_speed")
+export declare function mpx_set_all_servo_speed(speed: i32): i32;
+@external("env", "mpx_reset_offsets")
+export declare function mpx_reset_offsets(): i32;
+@external("env", "mpx_read_temperature_c")
+export declare function mpx_read_temperature_c(id: i32): f32;
+@external("env", "mpx_board_scale_dd")
+export declare function mpx_board_scale_dd(): f32;
+@external("env", "mpx_param_f")
+export declare function mpx_param_f(name_ptr: usize, fallback: f32): f32;
+@external("env", "mpx_param_i")
+export declare function mpx_param_i(name_ptr: usize, fallback: i32): i32;
+
+// ── Overlay, tick and trace ─────────────────────────────────────
+@external("env", "mpx_overlay")
+export declare function mpx_overlay(id: i32, deg: f32): i32;
+@external("env", "mpx_overlay_get")
+export declare function mpx_overlay_get(id: i32): f32;
+@external("env", "mpx_overlay_clear")
+export declare function mpx_overlay_clear(): i32;
+@external("env", "mpx_tick_every")
+export declare function mpx_tick_every(period_ms: i32): i32;
+@external("env", "mpx_tick_stop")
+export declare function mpx_tick_stop(): i32;
+@external("env", "mpx_trace")
+export declare function mpx_trace(name_ptr: usize, value: f32): i32;
+
+// ── Display canvas ──────────────────────────────────────────────
+@external("env", "display_width")
+export declare function display_width(): i32;
+@external("env", "display_height")
+export declare function display_height(): i32;
+@external("env", "display_rgb")
+export declare function display_rgb(r: i32, g: i32, b: i32): i32;
+@external("env", "display_clear")
+export declare function display_clear(color: i32): i32;
+@external("env", "display_pixel")
+export declare function display_pixel(x: i32, y: i32, color: i32): i32;
+@external("env", "display_rect")
+export declare function display_rect(x: i32, y: i32, w: i32, h: i32, color: i32, radius: i32, border: i32): i32;
+@external("env", "display_circle")
+export declare function display_circle(cx: i32, cy: i32, r: i32, color: i32, border: i32): i32;
+@external("env", "display_line")
+export declare function display_line(x1: i32, y1: i32, x2: i32, y2: i32, color: i32, width: i32): i32;
+@external("env", "display_arc")
+export declare function display_arc(cx: i32, cy: i32, r: i32, start_deg: i32, end_deg: i32, color: i32, width: i32): i32;
+@external("env", "display_text")
+export declare function display_text(x: i32, y: i32, text_ptr: usize, color: i32, size: i32, align: i32, max_w: i32): i32;
+@external("env", "display_blit")
+export declare function display_blit(x: i32, y: i32, w: i32, h: i32, data_ptr: usize, len: i32): i32;
+@external("env", "display_show")
+export declare function display_show(hold_ms: i32): i32;
+@external("env", "display_face")
+export declare function display_face(): i32;
+@external("env", "display_show_text")
+export declare function display_show_text(text_ptr: usize): i32;
+@external("env", "display_show_emotion")
+export declare function display_show_emotion(name_ptr: usize): i32;
+@external("env", "display_set_colors")
+export declare function display_set_colors(background_rgb: i32, eyes_rgb: i32): i32;
+@external("env", "display_set_brightness")
+export declare function display_set_brightness(percent: i32): i32;
+
+// ── Filesystem / Music / Robot state ────────────────────────────
+@external("env", "fs_read")
+export declare function fs_read(path_ptr: usize, buf_ptr: usize, cap: i32): i32;
+@external("env", "fs_write")
+export declare function fs_write(path_ptr: usize, data_ptr: usize, len: i32): i32;
+@external("env", "fs_delete")
+export declare function fs_delete(path_ptr: usize): i32;
+@external("env", "fs_exists")
+export declare function fs_exists(path_ptr: usize): i32;
+@external("env", "fs_list")
+export declare function fs_list(dir_ptr: usize, buf_ptr: usize, cap: i32): i32;
+@external("env", "fs_info")
+export declare function fs_info(out_ptr: usize): i32;
+@external("env", "music_play")
+export declare function music_play(what_ptr: usize, title_ptr: usize, cap: i32): i32;
+@external("env", "music_stop")
+export declare function music_stop(): i32;
+@external("env", "robot_get_config")
+export declare function robot_get_config(out_ptr: usize): i32;
+@external("env", "robot_get_gait")
+export declare function robot_get_gait(buf_ptr: usize, cap: i32): i32;
+
+// ── Microphone / Speaker / HTTP ─────────────────────────────────
+@external("env", "mpx_mic_start")
+export declare function mpx_mic_start(sample_rate: i32): i32;
+@external("env", "mpx_mic_read")
+export declare function mpx_mic_read(pcm_ptr: usize, frames: i32): i32;
+@external("env", "mpx_mic_stop")
+export declare function mpx_mic_stop(): i32;
+@external("env", "mpx_audio_play_file")
+export declare function mpx_audio_play_file(path_ptr: usize): i32;
+@external("env", "mpx_audio_stream_url")
+export declare function mpx_audio_stream_url(url_ptr: usize): i32;
+@external("env", "mpx_http_get")
+export declare function mpx_http_get(url_ptr: usize, response_ptr: usize, cap: i32): i32;
+@external("env", "mpx_http_post")
+export declare function mpx_http_post(url_ptr: usize, body_ptr: usize, response_ptr: usize, cap: i32): i32;
 
 
 // ═══════════════════════════════════════════════════════════════════
 //  Part 2 — High-Level Abstractions
 // ═══════════════════════════════════════════════════════════════════
 
-// ──── 1. Gait enum ──────────────────────────────────────────────
+// ──── 1. Host enums ─────────────────────────────────────────────
+
+export const enum ControlDomain {
+    NONE   = 0,
+    GAIT   = 1,
+    FEET   = 2,
+    JOINTS = 3,
+    BUS    = 4,
+}
+
+export const enum Leg {
+    FR = 0,
+    FL = 1,
+    RR = 2,
+    RL = 3,
+}
 
 export const enum Gait {
     NONE         = 0,
@@ -138,52 +328,20 @@ export const enum Gait {
     MOVE_RB      = 37,
 }
 
-const GAIT_NAMES: StaticArray<u8[]> = [
-    [0x6e, 0x6f, 0x6e, 0x65],                               // "none"
-    [0x69, 0x6e, 0x69, 0x74],                               // "init"
-    [0x73, 0x74, 0x65, 0x70],                               // "step"
-    [0x72, 0x6f, 0x6c, 0x6c],                               // "roll"
-    [0x70, 0x69, 0x74, 0x63, 0x68],                         // "pitch"
-    [0x73, 0x74, 0x72, 0x65, 0x74, 0x63, 0x68],             // "stretch"
-    [0x61, 0x64, 0x76, 0x61, 0x6e, 0x63, 0x65],             // "advance"
-    [0x62, 0x61, 0x63, 0x6b],                               // "back"
-    [0x6c, 0x65, 0x66, 0x74],                               // "left"
-    [0x72, 0x69, 0x67, 0x68, 0x74],                         // "right"
-    [0x74, 0x75, 0x72, 0x6e, 0x4c],                         // "turnL"
-    [0x74, 0x75, 0x72, 0x6e, 0x52],                         // "turnR"
-    [0x74, 0x77, 0x65, 0x72, 0x6b],                         // "twerk"
-    [0x6a, 0x75, 0x6d, 0x70],                               // "jump"
-    [0x6a, 0x75, 0x6d, 0x70, 0x66, 0x77, 0x64],             // "jumpfwd"
-    [0x74, 0x65, 0x73, 0x74, 0x73, 0x70, 0x65, 0x65, 0x64], // "testspeed"
-    [0x6c, 0x6f, 0x6f, 0x6b, 0x75, 0x70],                   // "lookup"
-    [0x6c, 0x6f, 0x6f, 0x6b, 0x64, 0x6f, 0x77, 0x6e],       // "lookdown"
-    [0x6c, 0x6f, 0x6f, 0x6b, 0x6c, 0x65, 0x66, 0x74],       // "lookleft"
-    [0x6c, 0x6f, 0x6f, 0x6b, 0x72, 0x69, 0x67, 0x68, 0x74], // "lookright"
-    [0x6c, 0x6f, 0x6f, 0x6b, 0x75, 0x6c],                   // "lookul"
-    [0x6c, 0x6f, 0x6f, 0x6b, 0x75, 0x72],                   // "lookur"
-    [0x6c, 0x6f, 0x6f, 0x6b, 0x6c, 0x6c],                   // "lookll"
-    [0x6c, 0x6f, 0x6f, 0x6b, 0x6c, 0x72],                   // "looklr"
-    [0x66, 0x6c, 0x65, 0x67, 0x4c],                         // "flegL"
-    [0x66, 0x6c, 0x65, 0x67, 0x52],                         // "flegR"
-    [0x62, 0x6c, 0x65, 0x67, 0x4c],                         // "blegL"
-    [0x62, 0x6c, 0x65, 0x67, 0x52],                         // "blegR"
-    [0x68, 0x65, 0x69, 0x67, 0x68, 0x74, 0x75, 0x70],       // "heightup"
-    [0x68, 0x65, 0x69, 0x67, 0x68, 0x74, 0x64, 0x6f, 0x77, 0x6e], // "heightdown"
-    [0x62, 0x61, 0x6c, 0x61, 0x6e, 0x63, 0x65],             // "balance"
-    [0x62, 0x6f, 0x77, 0x62, 0x61, 0x63, 0x6b],             // "bowback"
-    [0x62, 0x6f, 0x64, 0x79, 0x63, 0x79, 0x63, 0x6c, 0x65], // "bodycycle"
-    [0x68, 0x65, 0x61, 0x64, 0x65, 0x6c, 0x6c, 0x69, 0x70, 0x73, 0x65], // "headellipse"
-    [0x6d, 0x6f, 0x76, 0x65, 0x4c, 0x46],                   // "moveLF"
-    [0x6d, 0x6f, 0x76, 0x65, 0x52, 0x46],                   // "moveRF"
-    [0x6d, 0x6f, 0x76, 0x65, 0x4c, 0x42],                   // "moveLB"
-    [0x6d, 0x6f, 0x76, 0x65, 0x52, 0x42],                   // "moveRB"
+const GAIT_NAMES: string[] = [
+    "none", "init", "step", "roll", "pitch", "stretch", "advance", "back",
+    "left", "right", "turnL", "turnR", "twerk", "jump", "jumpfwd", "testspeed",
+    "lookup", "lookdown", "lookleft", "lookright", "lookul", "lookur", "lookll",
+    "looklr", "flegL", "flegR", "blegL", "blegR", "heightup", "heightdown",
+    "balance", "bowback", "bodycycle", "headellipse", "moveLF", "moveRF", "moveLB",
+    "moveRB",
 ];
 
 /** Start a gait using the type-safe enum. */
 export function robotGait(g: Gait): void {
     const idx = g as i32;
     if (idx < 0 || idx > 37) return;
-    const name = GAIT_NAMES[idx];
+    const name = String.UTF8.encode(GAIT_NAMES[idx], true);
     robot_gait(changetype<usize>(name));
 }
 

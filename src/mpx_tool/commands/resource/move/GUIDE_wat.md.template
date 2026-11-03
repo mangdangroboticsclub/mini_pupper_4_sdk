@@ -15,14 +15,17 @@ mpx move run {name}.wasm
 
 ## Host Functions
 
-All host functions are registered under the `"env"` module.
-Import them directly in your WAT source:
+All host functions are registered under the `"env"` module using host ABI v9.
+Import them directly in your WAT source. Command functions return `i32`; use
+`drop` after a call when ignoring its status.
 
 ```wat
-(import "env" "print" (func $print (param i32 i32)))
-(import "env" "robot_gait" (func $robot_gait (param i32)))
-(import "env" "robot_delay_ms" (func $robot_delay_ms (param i32)))
+(import "env" "print" (func $print (param i32 i32) (result i32)))
+(import "env" "robot_gait" (func $robot_gait (param i32) (result i32)))
+(import "env" "robot_delay_ms" (func $robot_delay_ms (param i32) (result i32)))
 ```
+
+See `include/host_functions.md` for all 107 imports and buffer layouts.
 
 ## Safety
 
