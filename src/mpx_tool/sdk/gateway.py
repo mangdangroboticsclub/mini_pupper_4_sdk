@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from typing import Any
 from urllib.error import URLError
-from urllib.parse import urljoin
+from urllib.parse import quote, urljoin
 from urllib.request import Request, urlopen
 
 from mpx_tool.config import DEFAULT_GATEWAY_URL
@@ -155,6 +155,8 @@ class GatewayClient:
         token: str,
         skill_type: str,
         source_language: str,
+        price_minor: int | None = None,
+        currency: str | None = None,
     ) -> tuple[int, dict[str, Any]]:
         """POST /v1/publish — one code path for WASM and AWA skills.
 
@@ -170,7 +172,22 @@ class GatewayClient:
             "artifact": artifact_b64,
             "manifest": manifest,
         }
+        if price_minor is not None:
+            body["price_minor"] = price_minor
+            body["currency"] = currency
         return self._request_with_status("POST", "/v1/publish", data=body, token=token)
+
+    def set_visibility(
+        self,
+        skill_id: str,
+        visibility: str,
+        token: str,
+    ) -> tuple[int, dict[str, Any]]:
+        """PATCH the authenticated developer's skill visibility."""
+        path = f"/v1/skills/{quote(skill_id, safe='')}/visibility"
+        return self._request_with_status(
+            "PATCH", path, data={"visibility": visibility}, token=token,
+        )
 
     # ── Robot endpoints ──────────────────────────────────────────
 

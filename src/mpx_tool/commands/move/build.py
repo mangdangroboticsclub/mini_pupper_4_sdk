@@ -15,6 +15,7 @@ import subprocess
 from pathlib import Path
 
 from mpx_tool.config import MOVE_TOOLCHAIN_IMAGE
+from mpx_tool.resources import SKILL_TESTER_URL
 from mpx_tool.sdk.docker import DockerError, docker_available, ensure_image, run_image
 
 # ── Local toolchain detection (fallback) ─────────────────────────
@@ -280,3 +281,5 @@ def cmd_move_build(args: argparse.Namespace) -> None:
         _validate(output, cwd, use_docker)
     if args.inspect:
         _inspect(output, cwd, use_docker)
+
+    print(f"   🧪 Move skill tester: {SKILL_TESTER_URL}")

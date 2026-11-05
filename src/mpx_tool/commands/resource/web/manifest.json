@@ -6,6 +6,8 @@
   "source_language": "javascript",
   "version": "{{VERSION}}",
   "readme": "Agentic web actions for {{DOMAIN}}.",
+  "tags": [],
+  "icon_url": "",
   "actions": {
     "getPage": {
       "description": "Navigate to a specific page on the site and extract its content. Provide a targetUrl, or let the handler derive it from other params.",

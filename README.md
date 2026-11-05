@@ -77,7 +77,8 @@ stops serving the old bytes.
 mpx signup <username>
 mpx login <username>
 mpx logout
-mpx publish [dir]           # reads manifest.json to pick the skill family
+mpx publish [dir] [--price AMOUNT] [--currency ISO] [--force]
+mpx visibility <skill_id> <public|hidden>
 mpx search [query]
 mpx info <skill_id>
 mpx versions <skill_id>
@@ -132,7 +133,7 @@ exit code `1`.
 Each scaffolded project has a `manifest.json` that `mpx publish` reads:
 
 - **Both families** — `slug`, `title`, `version`, `readme`, `skill_type`,
-  `source_language`
+  `source_language`, `tags`, `icon_url`
 - **Web only** — `domain`, `actions`, `capabilities`, `urls`, `timeout`,
   `memoryLimitMB`
 
@@ -147,8 +148,46 @@ mpx update-manifest .        # or: mpx move update-manifest . / mpx web update-m
 ```
 
 It prompts per field with the current value as the default. For scripted updates
-pass `--slug/--title/--version/--readme/--domain`, and `--dry-run` to preview.
-Keep the GUIDE prose in sync manually — no generator rewrites it.
+pass `--slug/--title/--version/--readme/--domain/--tags/--icon-url`, and
+`--dry-run` to preview. Keep the GUIDE prose in sync manually — no generator
+rewrites it.
+
+## Publishing to the store
+
+`tags` is an array of up to 16 short strings used as storefront subcategories.
+`icon_url` is an optional HTTPS image URL; the MiniPupper eyes remain the
+fallback when it is empty or the image cannot load.
+
+```json
+{
+  "tags": ["dance", "gaits"],
+  "icon_url": "https://cdn.example.com/skills/dance.png"
+}
+```
+
+Prices use normal major-unit currency amounts. The CLI checks that the currency
+is supported by the payment provider and validates its decimal precision before
+uploading the artifact.
+
+```bash
+mpx publish . --price 4.99 --currency USD
+mpx publish . --price 100 --currency JPY    # JPY accepts no decimals
+```
+
+Omitting `--price` leaves an existing listing's price unchanged; a new listing
+defaults to free. Likewise, omitted `tags`/`icon_url` preserve existing metadata;
+use an empty tag array or empty icon URL to clear them explicitly. New skills
+start hidden, including after publication. Make a skill visible only when it is
+ready, or hide it again, with:
+
+```bash
+mpx visibility <skill_id> public
+mpx visibility <skill_id> hidden
+```
+
+Re-publishing a new version does not reset existing visibility. Manage the
+listing in the [developer portal](https://skills.mangdang.org/) and test Move
+skills in the [Move Skill Tester](https://md-robotics-mp4-skill-tester.static.hf.space/).
 
 ## Prerequisites
 

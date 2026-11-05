@@ -66,6 +66,8 @@ _FIELD_ROWS = (
     ("`title`", "Listing name in the marketplace."),
     ("`version`", "Must be `X.Y.Z`. `mpx publish` offers a bump when the version already exists and rewrites this file."),
     ("`readme`", "One-paragraph summary surfaced in the marketplace listing."),
+    ("`tags`", "Array of up to 16 storefront subcategory tags (40 characters each)."),
+    ("`icon_url`", "Optional HTTPS image URL for the storefront icon; blank uses the default icon."),
     ("`skill_type`", "{skill_type} — selects how `mpx publish` validates and ships this skill."),
     ("`source_language`", "{language}"),
 )

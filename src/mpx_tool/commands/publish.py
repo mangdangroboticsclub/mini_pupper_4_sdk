@@ -15,7 +15,10 @@ import json
 import sys
 from pathlib import Path
 
+from mpx_tool.currency import parse_price_minor
 from mpx_tool.manifest import parse_semver, write_manifest
+from mpx_tool.resources import DEVELOPER_PORTAL_URL, SKILL_TESTER_URL
+from mpx_tool.storefront import normalise_manifest_metadata
 from mpx_tool.sdk.auth import (
     get_username_from_token,
     read_state,
@@ -29,7 +32,15 @@ _MAX_WASM_BYTES = 256 * 1024
 
 
 def add_publish_parser(sub: argparse._SubParsersAction) -> None:
-    p = sub.add_parser("publish", help="Publish a skill to the marketplace")
+    p = sub.add_parser(
+        "publish",
+        help="Publish a skill to the marketplace",
+        epilog=(
+            f"Developer portal: {DEVELOPER_PORTAL_URL}\n"
+            f"Move skill tester: {SKILL_TESTER_URL}"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     p.add_argument(
         "dir",
         nargs="?",
@@ -40,6 +51,16 @@ def add_publish_parser(sub: argparse._SubParsersAction) -> None:
         "--force",
         action="store_true",
         help="Skip the skill-identity lock check",
+    )
+    p.add_argument(
+        "--price",
+        default=None,
+        help="Listing price in major units, for example 4.99 (default for new skills: free)",
+    )
+    p.add_argument(
+        "--currency",
+        default=None,
+        help="Provider-supported ISO 4217 currency for --price (default: USD)",
     )
 
 
@@ -131,6 +152,19 @@ def cmd_publish(args: argparse.Namespace) -> None:
         print(f"❌ Invalid manifest.json: {e}", file=sys.stderr)
         sys.exit(1)
 
+    price_minor: int | None = None
+    currency: str | None = None
+    try:
+        if args.price is not None:
+            price_minor, currency = parse_price_minor(args.price, args.currency or "USD")
+        elif args.currency is not None:
+            raise ValueError("'--currency' requires '--price'.")
+
+        manifest = normalise_manifest_metadata(manifest)
+    except ValueError as e:
+        print(f"❌ {e}", file=sys.stderr)
+        sys.exit(1)
+
     slug = manifest.get("slug") or manifest.get("domain") or skill_dir.name
     title = manifest.get("title", slug)
     version = str(manifest.get("version", "1.0.0")).strip()
@@ -209,6 +243,8 @@ def cmd_publish(args: argparse.Namespace) -> None:
             token=token,
             skill_type=skill_type,
             source_language=source_language,
+            price_minor=price_minor,
+            currency=currency,
         )
 
     try:
@@ -241,6 +277,11 @@ def cmd_publish(args: argparse.Namespace) -> None:
             print(f"   {body['message']}")
         if "path" in body:
             print(f"   📍 {body['path']}")
+        if body.get("visibility") == "hidden":
+            print(f"   🔒 Hidden from the store. Make public with: mpx visibility {skill_id} public")
+        print(f"   Developer portal: {DEVELOPER_PORTAL_URL}")
+        if skill_type in _WASM_TYPES:
+            print(f"   Move skill tester: {SKILL_TESTER_URL}")
         state[skill_id] = {
             "skill_type": skill_type,
             "dir": str(skill_dir),

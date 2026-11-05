@@ -117,6 +117,8 @@ def cmd_move_init(args: argparse.Namespace) -> None:
             "source_language": lang,
             "version": version,
             "readme": "A WASM skill for the MPX-Dog quadruped robot.",
+            "tags": [],
+            "icon_url": "",
         },
     )
 

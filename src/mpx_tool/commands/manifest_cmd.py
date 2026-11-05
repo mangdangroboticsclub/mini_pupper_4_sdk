@@ -21,6 +21,7 @@ from pathlib import Path
 
 from mpx_tool.commands.scaffold import prompt
 from mpx_tool.manifest import family_label, is_wasm, parse_semver, read_manifest, write_manifest
+from mpx_tool.storefront import normalise_icon_url, normalise_tags
 
 # Editable fields, in prompt order. `applies_to_web` fields are skipped for WASM.
 _EDITABLE: tuple[tuple[str, str, bool], ...] = (
@@ -28,6 +29,8 @@ _EDITABLE: tuple[tuple[str, str, bool], ...] = (
     ("title", "Title", True),
     ("version", "Version (X.Y.Z)", True),
     ("readme", "Readme (one-paragraph summary)", True),
+    ("tags", "Tags (comma-separated storefront subcategories)", True),
+    ("icon_url", "Icon URL (HTTPS image, blank for default)", True),
     ("domain", "Domain (site this skill drives)", False),
 )
 
@@ -36,6 +39,8 @@ _FLAG_TO_FIELD = {
     "title": "title",
     "version": "version",
     "readme": "readme",
+    "tags": "tags",
+    "icon_url": "icon_url",
     "domain": "domain",
 }
 
@@ -43,20 +48,24 @@ _FLAG_TO_FIELD = {
 def add_update_manifest_parser(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser(
         "update-manifest",
-        help="Interactively edit manifest.json metadata (slug/title/version/readme/domain)",
+        help="Interactively edit storefront and manifest.json metadata",
     )
     p.add_argument("dir", nargs="?", default=".", help="Skill directory (default: current directory)")
     p.add_argument("--slug", default=None, help="Set slug without prompting")
     p.add_argument("--title", default=None, help="Set title without prompting")
     p.add_argument("--version", default=None, help="Set version (semver X.Y.Z) without prompting")
     p.add_argument("--readme", default=None, help="Set readme summary without prompting")
+    p.add_argument("--tags", default=None, help="Set comma-separated storefront tags without prompting")
+    p.add_argument("--icon-url", default=None, help="Set HTTPS storefront icon URL (blank restores default)")
     p.add_argument("--domain", default=None, help="Set domain without prompting (web skills)")
     p.add_argument("--dry-run", action="store_true", help="Show the resulting manifest without writing")
 
 
 def _prompt_field(manifest: dict, field: str, question: str) -> str:
-    current = str(manifest.get(field, ""))
-    return prompt(question, current)
+    current = manifest.get(field, "")
+    if field == "tags" and isinstance(current, list):
+        current = ", ".join(str(tag) for tag in current)
+    return prompt(question, str(current))
 
 
 def _ask_field(manifest: dict, field: str, question: str) -> str:
@@ -96,8 +105,17 @@ def cmd_update_manifest(args: argparse.Namespace) -> None:
         print(f'❌ Invalid version "{provided["version"]}" — must be semver (X.Y.Z).', file=sys.stderr)
         sys.exit(1)
 
+    try:
+        if "tags" in provided:
+            provided["tags"] = normalise_tags([part.strip() for part in provided["tags"].split(",")])
+        if "icon_url" in provided:
+            provided["icon_url"] = normalise_icon_url(provided["icon_url"]) or ""
+    except ValueError as e:
+        print(f"❌ {e}", file=sys.stderr)
+        sys.exit(1)
+
     interactive = sys.stdin.isatty()
-    updates: dict[str, str] = {}
+    updates: dict[str, object] = {}
 
     if provided:
         updates.update(provided)
@@ -109,8 +127,18 @@ def cmd_update_manifest(args: argparse.Namespace) -> None:
             if field not in manifest and field == "domain":
                 continue  # only offer domain when the manifest already declares one
             value = _ask_field(manifest, field, question)
-            if value and value != str(manifest.get(field, "")):
-                updates[field] = value
+            try:
+                if field == "tags":
+                    parsed_value: object = normalise_tags([part.strip() for part in value.split(",")])
+                elif field == "icon_url":
+                    parsed_value = normalise_icon_url(value) or ""
+                else:
+                    parsed_value = value
+            except ValueError as e:
+                print(f"  ❌ {e}", file=sys.stderr)
+                sys.exit(1)
+            if parsed_value != manifest.get(field, "") and (parsed_value or field in manifest):
+                updates[field] = parsed_value
     else:
         print(f"  {manifest_path} (skill_type={manifest.get('skill_type', 'AWA')})")
         for field, _question, applies_to_web in _EDITABLE:
@@ -127,11 +155,11 @@ def cmd_update_manifest(args: argparse.Namespace) -> None:
         print("\n  No changes.\n")
         return
 
-    for field in ("slug", "title", "version", "readme", "domain"):
+    for field in ("slug", "title", "version", "readme", "tags", "icon_url", "domain"):
         if field not in updates:
             continue
         value = updates[field]
-        if field == "version" and parse_semver(value) is None:
+        if field == "version" and parse_semver(str(value)) is None:
             print(f'❌ Invalid version "{value}" — must be semver (X.Y.Z).', file=sys.stderr)
             sys.exit(1)
         old = manifest.get(field)

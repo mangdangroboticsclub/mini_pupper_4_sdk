@@ -3,7 +3,8 @@
 Command surface (design doc §5):
 
   mpx login | signup | logout          # shared marketplace auth
-  mpx publish [dir]                    # shared publish (auto-detects family)
+  mpx publish [dir] [--price N --currency ISO]
+  mpx visibility <skill> <public|hidden>
   mpx search | info | versions         # shared marketplace browse
 
   mpx move init|build|upload|run|list|delete   # robot (WASM) skills
@@ -20,12 +21,14 @@ import sys
 import argparse
 
 from mpx_tool import __version__
+from mpx_tool.resources import DEVELOPER_PORTAL_URL, SKILL_TESTER_URL
 from mpx_tool.commands.auth import add_auth_parsers, cmd_login, cmd_logout, cmd_signup
 from mpx_tool.commands.info import add_info_parser, cmd_info
 from mpx_tool.commands.manifest_cmd import add_update_manifest_parser, cmd_update_manifest
 from mpx_tool.commands.publish import add_publish_parser, cmd_publish
 from mpx_tool.commands.search import add_search_parser, cmd_search
 from mpx_tool.commands.versions import add_versions_parser, cmd_versions
+from mpx_tool.commands.visibility import add_visibility_parser, cmd_visibility
 from mpx_tool.commands.move.build import add_move_build_parser, cmd_move_build
 from mpx_tool.commands.move.delete import add_move_delete_parser, cmd_move_delete
 from mpx_tool.commands.move.init import add_move_init_parser, cmd_move_init
@@ -45,6 +48,7 @@ _SHARED = {
     "signup": cmd_signup,
     "logout": cmd_logout,
     "publish": cmd_publish,
+    "visibility": cmd_visibility,
     "search": cmd_search,
     "info": cmd_info,
     "versions": cmd_versions,
@@ -79,6 +83,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="mpx",
         description="MPX developer CLI — robot (WASM) and web (AWA) skills",
+        epilog=(
+            "Resources:\n"
+            f"  Developer portal: {DEVELOPER_PORTAL_URL}\n"
+            f"  Move skill tester: {SKILL_TESTER_URL}"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
         "--gateway",
@@ -101,6 +111,7 @@ def build_parser() -> argparse.ArgumentParser:
     # ── Shared (marketplace / auth) ──────────────────────────────
     add_auth_parsers(sub)
     add_publish_parser(sub)
+    add_visibility_parser(sub)
     add_search_parser(sub)
     add_info_parser(sub)
     add_versions_parser(sub)
@@ -180,7 +191,7 @@ _LEGACY_NOTICE = "⚠️  '{prog}' is deprecated — use 'mpx' instead."
 
 _MOVE_CMDS = {"init", "build", "upload", "run", "list", "ls", "delete"}
 _WEB_CMDS = {"init", "seed", "session", "readme", "list", "delete", "up", "down"}
-_SHARED_CMDS = {"login", "signup", "logout", "publish", "search", "info", "versions", "update-manifest"}
+_SHARED_CMDS = {"login", "signup", "logout", "publish", "visibility", "search", "info", "versions", "update-manifest"}
 
 
 def _legacy_main(prog: str, family: str, argv: list[str] | None) -> None:
