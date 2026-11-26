@@ -13,7 +13,7 @@ APP_NAME = "mpx"
 
 # ── Gateway (marketplace / auth / publish) ──────────────────────
 # Decision #2: canonical default, overridable via env.
-DEFAULT_GATEWAY_URL = os.environ.get("MPX_GATEWAY_URL", "http://skills.mangdang.org:8080")
+DEFAULT_GATEWAY_URL = os.environ.get("MPX_GATEWAY_URL", "http://api.mangdang.org:80")
 
 # ── Robot (move family) ─────────────────────────────────────────
 DEFAULT_ROBOT_HOST = os.environ.get("MPX_HOST", "192.168.2.1")
